@@ -17,6 +17,21 @@
 		A10000000000000000000008 /* DetailPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* DetailPanel.swift */; };
 		A10000000000000000000009 /* AlertsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000009 /* AlertsSection.swift */; };
 		A1000000000000000000000A /* FireWatchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000A /* FireWatchTests.swift */; };
+		A20000000000000000000001 /* WindFieldTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* WindFieldTypes.swift */; };
+		A20000000000000000000002 /* WindPipelineConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000002 /* WindPipelineConfig.swift */; };
+		A20000000000000000000003 /* WindVectors.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* WindVectors.swift */; };
+		A20000000000000000000004 /* WindInterpolate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000004 /* WindInterpolate.swift */; };
+		A20000000000000000000005 /* WindBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000005 /* WindBackground.swift */; };
+		A20000000000000000000006 /* WindRoughness.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000006 /* WindRoughness.swift */; };
+		A20000000000000000000007 /* WindHeightNormalize.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000007 /* WindHeightNormalize.swift */; };
+		A20000000000000000000008 /* WindQC.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000008 /* WindQC.swift */; };
+		A20000000000000000000009 /* WindTemporal.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000009 /* WindTemporal.swift */; };
+		A2000000000000000000000A /* WindInversion.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000A /* WindInversion.swift */; };
+		A2000000000000000000000B /* WindAirMass.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000B /* WindAirMass.swift */; };
+		A2000000000000000000000C /* WindDownscale.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000C /* WindDownscale.swift */; };
+		A2000000000000000000000D /* WindEnrich.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000D /* WindEnrich.swift */; };
+		A2000000000000000000000E /* WindAnalysis.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000E /* WindAnalysis.swift */; };
+		A2000000000000000000000F /* WindPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000F /* WindPipelineTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -43,6 +58,21 @@
 		B1000000000000000000000C /* FireWatch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FireWatch.entitlements; sourceTree = "<group>"; };
 		B1000000000000000000000D /* FireWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FireWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B1000000000000000000000E /* FireWatchTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FireWatchTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20000000000000000000001 /* WindFieldTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindFieldTypes.swift; sourceTree = "<group>"; };
+		B20000000000000000000002 /* WindPipelineConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindPipelineConfig.swift; sourceTree = "<group>"; };
+		B20000000000000000000003 /* WindVectors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindVectors.swift; sourceTree = "<group>"; };
+		B20000000000000000000004 /* WindInterpolate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindInterpolate.swift; sourceTree = "<group>"; };
+		B20000000000000000000005 /* WindBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindBackground.swift; sourceTree = "<group>"; };
+		B20000000000000000000006 /* WindRoughness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindRoughness.swift; sourceTree = "<group>"; };
+		B20000000000000000000007 /* WindHeightNormalize.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindHeightNormalize.swift; sourceTree = "<group>"; };
+		B20000000000000000000008 /* WindQC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindQC.swift; sourceTree = "<group>"; };
+		B20000000000000000000009 /* WindTemporal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindTemporal.swift; sourceTree = "<group>"; };
+		B2000000000000000000000A /* WindInversion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindInversion.swift; sourceTree = "<group>"; };
+		B2000000000000000000000B /* WindAirMass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindAirMass.swift; sourceTree = "<group>"; };
+		B2000000000000000000000C /* WindDownscale.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindDownscale.swift; sourceTree = "<group>"; };
+		B2000000000000000000000D /* WindEnrich.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindEnrich.swift; sourceTree = "<group>"; };
+		B2000000000000000000000E /* WindAnalysis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindAnalysis.swift; sourceTree = "<group>"; };
+		B2000000000000000000000F /* WindPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindPipelineTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -82,6 +112,7 @@
 				D10000000000000000000005 /* Services */,
 				D10000000000000000000006 /* ViewModels */,
 				D1000000000000000000000A /* Views */,
+				D20000000000000000000001 /* Wind */,
 			);
 			path = FireWatch;
 			sourceTree = "<group>";
@@ -115,6 +146,7 @@
 			isa = PBXGroup;
 			children = (
 				B1000000000000000000000A /* FireWatchTests.swift */,
+				B2000000000000000000000F /* WindPipelineTests.swift */,
 			);
 			path = FireWatchTests;
 			sourceTree = "<group>";
@@ -143,6 +175,27 @@
 				B10000000000000000000009 /* AlertsSection.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		D20000000000000000000001 /* Wind */ = {
+			isa = PBXGroup;
+			children = (
+				B20000000000000000000001 /* WindFieldTypes.swift */,
+				B20000000000000000000002 /* WindPipelineConfig.swift */,
+				B20000000000000000000003 /* WindVectors.swift */,
+				B20000000000000000000004 /* WindInterpolate.swift */,
+				B20000000000000000000005 /* WindBackground.swift */,
+				B20000000000000000000006 /* WindRoughness.swift */,
+				B20000000000000000000007 /* WindHeightNormalize.swift */,
+				B20000000000000000000008 /* WindQC.swift */,
+				B20000000000000000000009 /* WindTemporal.swift */,
+				B2000000000000000000000A /* WindInversion.swift */,
+				B2000000000000000000000B /* WindAirMass.swift */,
+				B2000000000000000000000C /* WindDownscale.swift */,
+				B2000000000000000000000D /* WindEnrich.swift */,
+				B2000000000000000000000E /* WindAnalysis.swift */,
+			);
+			path = Wind;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -252,6 +305,20 @@
 				A10000000000000000000007 /* FireMap.swift in Sources */,
 				A10000000000000000000008 /* DetailPanel.swift in Sources */,
 				A10000000000000000000009 /* AlertsSection.swift in Sources */,
+				A20000000000000000000001 /* WindFieldTypes.swift in Sources */,
+				A20000000000000000000002 /* WindPipelineConfig.swift in Sources */,
+				A20000000000000000000003 /* WindVectors.swift in Sources */,
+				A20000000000000000000004 /* WindInterpolate.swift in Sources */,
+				A20000000000000000000005 /* WindBackground.swift in Sources */,
+				A20000000000000000000006 /* WindRoughness.swift in Sources */,
+				A20000000000000000000007 /* WindHeightNormalize.swift in Sources */,
+				A20000000000000000000008 /* WindQC.swift in Sources */,
+				A20000000000000000000009 /* WindTemporal.swift in Sources */,
+				A2000000000000000000000A /* WindInversion.swift in Sources */,
+				A2000000000000000000000B /* WindAirMass.swift in Sources */,
+				A2000000000000000000000C /* WindDownscale.swift in Sources */,
+				A2000000000000000000000D /* WindEnrich.swift in Sources */,
+				A2000000000000000000000E /* WindAnalysis.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -260,6 +327,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1000000000000000000000A /* FireWatchTests.swift in Sources */,
+				A2000000000000000000000F /* WindPipelineTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
