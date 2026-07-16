@@ -56,19 +56,9 @@ final class FireWatchTests: XCTestCase {
         XCTAssertEqual(fresh.stableMapID, aged.stableMapID)
     }
 
-    func testWindOverlayPrecomputesFixedGeographicStrokes() {
-        let samples = [
-            windSample(id: "nw", latitude: 35.0, longitude: -120.0),
-            windSample(id: "ne", latitude: 35.0, longitude: -118.0),
-            windSample(id: "sw", latitude: 34.0, longitude: -120.0),
-            windSample(id: "se", latitude: 34.0, longitude: -118.0)
-        ]
-        let overlay = WindMapOverlay(samples: samples, stations: [], mode: .model, influenceMiles: 30)
-
-        XCTAssertFalse(overlay.boundingMapRect.isNull)
-        XCTAssertFalse(overlay.strokes.isEmpty)
-        XCTAssertTrue(overlay.strokes.allSatisfy { $0.points.count >= 2 && !$0.mapRect.isNull })
-    }
+    // The static WindMapOverlay stroke test was retired with the overlay: wind
+    // rendering moved to the display-linked WindParticleView, and the analysis
+    // behind it is covered by WindPipelineTests and WindDataTests.
 
     func testCoincidentClusterPointsCannotTriggerRunawayZoom() throws {
         let coordinate = CLLocationCoordinate2D(latitude: 34.2, longitude: -118.3)
@@ -107,7 +97,4 @@ final class FireWatchTests: XCTestCase {
         IncidentFeature(properties: .init(incidentName: "Test", incidentSize: acres, percentContained: 10, fireDiscoveryDateTime: nil, incidentTypeCategory: "WF", pooCounty: "Ventura", pooCity: nil, pooState: "US-CA", modifiedOnDateTime: nil, totalIncidentPersonnel: nil, fireCause: nil, irwinID: id), geometry: .init(coordinates: [-119.2290, 34.3705]))
     }
 
-    private func windSample(id: String, latitude: Double, longitude: Double) -> WindSample {
-        WindSample(id: id, coordinate: .init(latitude: latitude, longitude: longitude), speedMPH: 12, directionDegrees: 270, gustMPH: 18)
-    }
 }

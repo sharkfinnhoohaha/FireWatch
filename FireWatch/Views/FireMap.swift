@@ -146,8 +146,17 @@ private struct ContextDeck: View {
                 Spacer()
                 Toggle("VANES", isOn: $state.showStations).toggleStyle(.switch).controlSize(.mini)
             }.font(.system(size: 9, weight: .semibold, design: .monospaced))
-            Text(state.windMode == .model ? "10 M MODEL · ARROWS POINT TOWARD FLOW" : "HEURISTIC NWS OBS ADJUSTMENT · NOT A FORECAST")
+            Text(windCaption)
                 .font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(.secondary)
+        }
+    }
+
+    private var windCaption: String {
+        switch state.windMode {
+        case .model: "MODEL WIND SPEED · 10 M BACKGROUND"
+        case .corrected: "VANE-CORRECTED · OI ANALYSIS, NOT A FORECAST"
+        case .disagreement: "MODEL ↔ VANE GAP · FLOW = REAL WIND"
+        case .confidence: "ANALYSIS CONFIDENCE 0→1 · FLOW = REAL WIND"
         }
     }
 
@@ -258,231 +267,6 @@ private struct DispatchContext: View {
     }
 }
 
-struct PreparedWindField {
-    struct Node {
-        let east: Double
-        let north: Double
-        let speed: Double
-        let confidence: Double
-        let disagreement: Double
-        static let calm = Node(east: 0, north: 0, speed: 0, confidence: 0, disagreement: 0)
-    }
-
-    let nodes: [Node]
-    private let rows: Int
-    private let columns: Int
-    private let minLatitude: Double
-    private let maxLatitude: Double
-    private let minLongitude: Double
-    private let maxLongitude: Double
-
-    init(samples: [WindSample], stations: [WeatherStation], mode: WindDisplayMode, influenceMiles: Double) {
-        let latitudeKeys = Array(Set(samples.map { Int(($0.coordinate.latitude * 1_000).rounded()) })).sorted()
-        let longitudeKeys = Array(Set(samples.map { Int(($0.coordinate.longitude * 1_000).rounded()) })).sorted()
-        rows = latitudeKeys.count; columns = longitudeKeys.count
-        minLatitude = Double(latitudeKeys.first ?? 0) / 1_000; maxLatitude = Double(latitudeKeys.last ?? 0) / 1_000
-        minLongitude = Double(longitudeKeys.first ?? 0) / 1_000; maxLongitude = Double(longitudeKeys.last ?? 0) / 1_000
-        var byCoordinate: [String: WindSample] = [:]
-        for sample in samples { byCoordinate["\(Int((sample.coordinate.latitude * 1_000).rounded())):\(Int((sample.coordinate.longitude * 1_000).rounded()))"] = sample }
-        var result: [Node] = []; result.reserveCapacity(rows * columns)
-        for latitudeKey in latitudeKeys {
-            for longitudeKey in longitudeKeys {
-                guard let sample = byCoordinate["\(latitudeKey):\(longitudeKey)"] else { result.append(.calm); continue }
-                let model = WindMath.flowComponents(speedMPH: sample.speedMPH, directionFromDegrees: sample.directionDegrees)
-                var residualEast = 0.0, residualNorth = 0.0, weightedDisagreement = 0.0, totalWeight = 0.0
-                for station in stations {
-                    let age = station.observedAt.map { max(0, Date.now.timeIntervalSince($0)) } ?? 0
-                    let freshness = exp(-age / 7_200)
-                    let miles = fastDistance(sample.coordinate, station.coordinate)
-                    let weight = exp(-pow(miles / max(influenceMiles, 1), 2)) * freshness
-                    guard weight > 0.01, let nearest = samples.min(by: { fastDistance($0.coordinate, station.coordinate) < fastDistance($1.coordinate, station.coordinate) }) else { continue }
-                    let stationModel = WindMath.flowComponents(speedMPH: nearest.speedMPH, directionFromDegrees: nearest.directionDegrees)
-                    let observed = WindMath.flowComponents(speedMPH: station.speedMPH, directionFromDegrees: station.directionDegrees)
-                    let deltaEast = observed.east - stationModel.east, deltaNorth = observed.north - stationModel.north
-                    residualEast += deltaEast * weight; residualNorth += deltaNorth * weight
-                    weightedDisagreement += hypot(deltaEast, deltaNorth) * weight; totalWeight += weight
-                }
-                let blend = 1 - exp(-totalWeight)
-                var east = model.east, north = model.north
-                if mode != .model, totalWeight > 0 {
-                    east += residualEast / totalWeight * blend
-                    north += residualNorth / totalWeight * blend
-                }
-                let speed = hypot(east, north)
-                if speed > 75 { east *= 75 / speed; north *= 75 / speed }
-                let nearestStation = stations.map { fastDistance(sample.coordinate, $0.coordinate) }.min() ?? 999
-                let confidence = max(0.08, min(1, exp(-nearestStation / max(influenceMiles * 1.7, 1))))
-                result.append(Node(east: east, north: north, speed: min(speed, 75), confidence: confidence, disagreement: totalWeight > 0 ? weightedDisagreement / totalWeight : 0))
-            }
-        }
-        nodes = result
-    }
-
-    func node(at coordinate: CLLocationCoordinate2D) -> Node {
-        guard rows > 0, columns > 0, !nodes.isEmpty else { return .calm }
-        guard coordinate.latitude >= minLatitude - 0.3, coordinate.latitude <= maxLatitude + 0.3,
-              coordinate.longitude >= minLongitude - 0.3, coordinate.longitude <= maxLongitude + 0.3 else { return .calm }
-        let rowFraction = (coordinate.latitude - minLatitude) / max(maxLatitude - minLatitude, 0.001)
-        let columnFraction = (coordinate.longitude - minLongitude) / max(maxLongitude - minLongitude, 0.001)
-        let row = min(rows - 1, max(0, Int((rowFraction * Double(rows - 1)).rounded())))
-        let column = min(columns - 1, max(0, Int((columnFraction * Double(columns - 1)).rounded())))
-        return nodes[row * columns + column]
-    }
-
-}
-
-final class WindMapOverlay: NSObject, MKOverlay {
-    struct Stroke {
-        let points: [MKMapPoint]
-        let mapRect: MKMapRect
-        let speed: Double
-        let confidence: Double
-        let disagreement: Double
-        let phase: Double
-    }
-
-    let field: PreparedWindField
-    let strokes: [Stroke]
-    let mode: WindDisplayMode
-    let coordinate: CLLocationCoordinate2D
-    let boundingMapRect: MKMapRect
-
-    init(samples: [WindSample], stations: [WeatherStation], mode: WindDisplayMode, influenceMiles: Double) {
-        field = PreparedWindField(samples: samples, stations: stations, mode: mode, influenceMiles: influenceMiles)
-        self.mode = mode
-        let latitudes = samples.map { $0.coordinate.latitude }
-        let longitudes = samples.map { $0.coordinate.longitude }
-        let northWest = MKMapPoint(CLLocationCoordinate2D(latitude: (latitudes.max() ?? 35.75) + 0.3, longitude: (longitudes.min() ?? -120.75) - 0.3))
-        let southEast = MKMapPoint(CLLocationCoordinate2D(latitude: (latitudes.min() ?? 33.25) - 0.3, longitude: (longitudes.max() ?? -117.25) + 0.3))
-        boundingMapRect = MKMapRect(x: min(northWest.x, southEast.x), y: min(northWest.y, southEast.y), width: abs(southEast.x - northWest.x), height: abs(southEast.y - northWest.y))
-        coordinate = MKMapPoint(x: boundingMapRect.midX, y: boundingMapRect.midY).coordinate
-        strokes = Self.makeStrokes(field: field, bounds: boundingMapRect)
-        super.init()
-    }
-
-    private static func makeStrokes(field: PreparedWindField, bounds: MKMapRect) -> [Stroke] {
-        var strokes: [Stroke] = []
-        strokes.reserveCapacity(240)
-        for index in 0..<240 {
-            let phase = pseudo(index * 7)
-            var point = MKMapPoint(
-                x: bounds.minX + pseudo(index * 17 + 3) * bounds.width,
-                y: bounds.minY + pseudo(index * 31 + 11) * bounds.height
-            )
-            let travel = phase * 20
-            for _ in 0..<Int(travel) { point = advance(point, field: field, scale: 1) }
-            point = advance(point, field: field, scale: travel - floor(travel))
-            point = wrapped(point, in: bounds)
-
-            var points = [point]
-            var speed = 0.0
-            var confidence = 0.0
-            var disagreement = 0.0
-            for _ in 0..<7 {
-                let node = field.node(at: point.coordinate)
-                guard node.speed > 0.1 else { break }
-                speed += node.speed
-                confidence += node.confidence
-                disagreement += node.disagreement
-                point = advance(point, node: node, scale: 1)
-                points.append(point)
-            }
-            guard points.count >= 2 else { continue }
-            let sampleCount = Double(points.count - 1)
-            var mapRect = MKMapRect.null
-            for point in points {
-                mapRect = mapRect.union(MKMapRect(x: point.x, y: point.y, width: 1, height: 1))
-            }
-            strokes.append(Stroke(
-                points: points,
-                mapRect: mapRect,
-                speed: speed / sampleCount,
-                confidence: confidence / sampleCount,
-                disagreement: disagreement / sampleCount,
-                phase: phase
-            ))
-        }
-        return strokes
-    }
-
-    private static func advance(_ point: MKMapPoint, field: PreparedWindField, scale: Double) -> MKMapPoint {
-        advance(point, node: field.node(at: point.coordinate), scale: scale)
-    }
-
-    private static func advance(_ point: MKMapPoint, node: PreparedWindField.Node, scale: Double) -> MKMapPoint {
-        let pointsPerMile = MKMapPointsPerMeterAtLatitude(point.coordinate.latitude) * 1_609.344
-        return MKMapPoint(
-            x: point.x + node.east * 0.018 * pointsPerMile * scale,
-            y: point.y - node.north * 0.018 * pointsPerMile * scale
-        )
-    }
-
-    private static func wrapped(_ point: MKMapPoint, in bounds: MKMapRect) -> MKMapPoint {
-        MKMapPoint(
-            x: bounds.minX + positiveRemainder(point.x - bounds.minX, bounds.width),
-            y: bounds.minY + positiveRemainder(point.y - bounds.minY, bounds.height)
-        )
-    }
-
-    private static func positiveRemainder(_ value: Double, _ divisor: Double) -> Double {
-        let result = value.truncatingRemainder(dividingBy: divisor)
-        return result < 0 ? result + divisor : result
-    }
-
-    private static func pseudo(_ seed: Int) -> Double {
-        abs(sin(Double(seed) * 12.9898) * 43_758.5453).truncatingRemainder(dividingBy: 1)
-    }
-}
-
-private final class WindMapRenderer: MKOverlayRenderer {
-    private let wind: WindMapOverlay
-
-    override init(overlay: MKOverlay) {
-        wind = overlay as! WindMapOverlay
-        super.init(overlay: overlay)
-    }
-
-    override func canDraw(_ mapRect: MKMapRect, zoomScale: MKZoomScale) -> Bool { mapRect.intersects(wind.boundingMapRect) }
-
-    override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
-        guard mapRect.intersects(wind.boundingMapRect), !wind.strokes.isEmpty else { return }
-        context.saveGState(); defer { context.restoreGState() }
-        context.setBlendMode(.plusLighter)
-        context.setLineCap(.round)
-        context.setLineJoin(.round)
-        let drawRect = mapRect.insetBy(dx: -mapRect.width * 0.08, dy: -mapRect.height * 0.08)
-        for (index, stroke) in wind.strokes.enumerated() where stroke.mapRect.intersects(drawRect) {
-            let converted = stroke.points.map(point(for:))
-            guard let start = converted.first, let end = converted.last, converted.count >= 2 else { continue }
-            let previous = converted[converted.count - 2]
-            let path = CGMutablePath(); path.move(to: start)
-            for point in converted.dropFirst() { path.addLine(to: point) }
-            let color: NSColor
-            switch wind.mode {
-            case .disagreement:
-                color = NSColor(calibratedHue: max(0, 0.94 - min(stroke.disagreement / 18, 1) * 0.12), saturation: 0.82, brightness: 1, alpha: (0.3 + stroke.confidence * 0.58) * (0.8 + stroke.phase * 0.2))
-            case .confidence:
-                color = NSColor(calibratedHue: 0.49, saturation: 0.7, brightness: 0.65 + stroke.confidence * 0.35, alpha: (0.3 + stroke.confidence * 0.58) * (0.8 + stroke.phase * 0.2))
-            default:
-                color = NSColor(calibratedHue: max(0.02, 0.55 - min(stroke.speed / 35, 1) * 0.48), saturation: 0.82, brightness: 1, alpha: (0.3 + stroke.confidence * 0.58) * (0.8 + stroke.phase * 0.2))
-            }
-            context.addPath(path)
-            context.setStrokeColor(color.cgColor)
-            context.setLineWidth((1.15 + min(stroke.speed / 24, 1.0)) / max(zoomScale, 0.000_001))
-            context.strokePath()
-            if index.isMultiple(of: 3), end != previous {
-                let angle = atan2(end.y - previous.y, end.x - previous.x)
-                let arrowSize = 4.2 / max(zoomScale, 0.000_001)
-                let arrow = CGMutablePath(); arrow.move(to: end)
-                arrow.addLine(to: CGPoint(x: end.x - cos(angle - 0.48) * arrowSize, y: end.y - sin(angle - 0.48) * arrowSize))
-                arrow.move(to: end)
-                arrow.addLine(to: CGPoint(x: end.x - cos(angle + 0.48) * arrowSize, y: end.y - sin(angle + 0.48) * arrowSize))
-                context.addPath(arrow); context.strokePath()
-            }
-        }
-    }
-}
-
 private struct ContributorMapView: NSViewRepresentable {
     @ObservedObject var state: AppState
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
@@ -519,7 +303,7 @@ private struct ContributorMapView: NSViewRepresentable {
         private var stationHashes: [String: Int] = [:]
         private var hotspots: [String: HotspotAnnotation] = [:]
         private var perimeters: [MKPolygon] = []
-        private var windOverlay: WindMapOverlay?
+        private var particleView: WindParticleView?
         private var lastIncidentRevision = -1
         private var lastIncidentFilterRevision = -1
         private var lastCameraRevision = -1
@@ -528,10 +312,8 @@ private struct ContributorMapView: NSViewRepresentable {
         private var lastStationRevision = -1
         private var lastHotspotRevision = -1
         private var lastPerimeterRevision = -1
-        private var lastWindOverlayRevision = -1
-        private var lastWindStationRevision = -1
+        private var lastWindFieldRevision = -1
         private var lastWindMode: WindDisplayMode?
-        private var lastWindInfluence = -1.0
         private var camerasVisible = false
         private var dispatchVisible = false
         private var stationsVisible = false
@@ -657,22 +439,30 @@ private struct ContributorMapView: NSViewRepresentable {
         }
 
         private func syncWind(on map: MKMapView) {
-            let needsUpdate = lastWindOverlayRevision != parent.state.windRevision ||
-                lastWindStationRevision != parent.state.stationRevision ||
+            let needsUpdate = lastWindFieldRevision != parent.state.windFieldRevision ||
                 lastWindMode != parent.state.windMode ||
-                lastWindInfluence != parent.state.vaneInfluenceMiles ||
                 windVisible != parent.state.showWind
             guard needsUpdate else { return }
-            lastWindOverlayRevision = parent.state.windRevision
-            lastWindStationRevision = parent.state.stationRevision
+            lastWindFieldRevision = parent.state.windFieldRevision
             lastWindMode = parent.state.windMode
-            lastWindInfluence = parent.state.vaneInfluenceMiles
             windVisible = parent.state.showWind
-            if let windOverlay { map.removeOverlay(windOverlay); self.windOverlay = nil }
-            guard parent.state.showWind, !parent.state.windSamples.isEmpty else { return }
-            let overlay = WindMapOverlay(samples: parent.state.windSamples, stations: parent.state.weatherStations, mode: parent.state.windMode, influenceMiles: parent.state.vaneInfluenceMiles)
-            windOverlay = overlay
-            map.addOverlay(overlay, level: .aboveRoads)
+            guard parent.state.showWind, let baked = parent.state.bakedWindField else {
+                particleView?.stop(clearTrails: true)
+                return
+            }
+            let view = ensureParticleView(on: map)
+            view.setField(baked.fieldSpec(mode: parent.state.windMode))
+            view.start()
+        }
+
+        private func ensureParticleView(on map: MKMapView) -> WindParticleView {
+            if let particleView { return particleView }
+            let view = WindParticleView(mapView: map, bbox: WindRegion.socal.bbox)
+            view.frame = map.bounds
+            view.autoresizingMask = [.width, .height]
+            map.addSubview(view)
+            particleView = view
+            return view
         }
 
         func syncSelection(on map: MKMapView) {
@@ -727,12 +517,17 @@ private struct ContributorMapView: NSViewRepresentable {
             mapView.setVisibleMapRect(mapRect, edgePadding: NSEdgeInsets(top: 90, left: 70, bottom: 70, right: 360), animated: true)
         }
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            if overlay is WindMapOverlay { return WindMapRenderer(overlay: overlay) }
             guard let polygon = overlay as? MKPolygon else { return MKOverlayRenderer(overlay: overlay) }
             let renderer = MKPolygonRenderer(polygon: polygon); renderer.fillColor = NSColor.systemRed.withAlphaComponent(0.14); renderer.strokeColor = NSColor.systemRed.withAlphaComponent(0.9); renderer.lineWidth = 1.2; return renderer
         }
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             let region = mapView.region; parent.state.cameraLatitude = region.center.latitude; parent.state.cameraLongitude = region.center.longitude; parent.state.cameraDistance = mapView.camera.centerCoordinateDistance
+        }
+
+        func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            // Trails are cleared per frame while the camera moves so they never
+            // smear against the shifting basemap (same as the web overlay).
+            particleView?.noteMapMovement()
         }
     }
 }

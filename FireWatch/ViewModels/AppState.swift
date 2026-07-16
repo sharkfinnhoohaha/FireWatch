@@ -46,7 +46,10 @@ final class AppState: ObservableObject {
     @Published var isShowingCachedData = false
     @Published var searchText = "" { didSet { rebuildIncidentCache(); rebuildSignalCache() } }
     @Published var windMode: WindDisplayMode = .model
-    @Published var vaneInfluenceMiles = 30.0
+    @Published var vaneInfluenceMiles = 30.0 { didSet { rebakeWindField() } }
+    private(set) var windFieldData: WindFieldData?
+    private(set) var bakedWindField: BakedWindField?
+    private(set) var windFieldRevision = 0
 
     @Published var showWildfires: Bool { didSet { defaults.set(showWildfires, forKey: "showWildfires"); rebuildIncidentCache() } }
     @Published var showPrescribed: Bool { didSet { defaults.set(showPrescribed, forKey: "showPrescribed"); rebuildIncidentCache() } }
@@ -264,8 +267,20 @@ final class AppState: ObservableObject {
             if windSamples != value.samples { windSamples = value.samples }
             if weatherStations != value.stations { weatherStations = value.stations }
         }
+        if let field = result.windField {
+            windFieldData = field
+            rebakeWindField()
+        }
         if result.incidents != nil || result.perimeters != nil || result.hotspots != nil || result.alerts != nil || result.cameras != nil || result.dispatchSignals != nil || result.wind != nil { lastUpdated = .now }
         isRefreshing = false
+    }
+
+    /// Rebuild the renderable field from the last fetched data. Cheap (pure
+    /// math over baked grids), so it runs on every vane-influence change; a
+    /// refetch is never needed to re-analyze.
+    private func rebakeWindField() {
+        bakedWindField = windFieldData?.bake(influenceKm: vaneInfluenceMiles * 1.609344)
+        windFieldRevision &+= 1
     }
 
     func isSourceStale(_ hostFragment: String) -> Bool {
