@@ -19,6 +19,7 @@ struct RefreshSnapshot: Sendable {
     var cameras: [AlertCamera]?
     var dispatchSignals: [DispatchSignal]?
     var wind: WindSnapshot?
+    var windField: WindFieldData?
     var staleSources: [String] = []
     var failures = FeedFailures()
 }
@@ -30,7 +31,6 @@ enum FeedService {
     private static let alertURL = "https://api.weather.gov/alerts/active?area=CA"
     private static let cameraBase = "https://services.arcgis.com/Zs2aNLFN00jrS4gG/ArcGIS/rest/services/Alert_Wildfire_Cameras/FeatureServer/0/query"
     private static let wildCADBase = "https://snknmqmon6.execute-api.us-west-2.amazonaws.com/centers"
-    private static let openMeteoBase = "https://api.open-meteo.com/v1/forecast"
 
     private enum Outcome: Sendable {
         case incidents(Result<[IncidentFeature], ErrorBox>)
@@ -39,7 +39,7 @@ enum FeedService {
         case alerts(Result<[NWSAlertFeature], ErrorBox>)
         case cameras(Result<[AlertCamera], ErrorBox>)
         case dispatch(Result<[DispatchSignal], ErrorBox>)
-        case wind(Result<WindSnapshot, ErrorBox>)
+        case wind(Result<WindFieldBundle, ErrorBox>)
     }
 
     struct ErrorBox: Error, Sendable { let message: String }
@@ -72,7 +72,7 @@ enum FeedService {
                 catch { return .dispatch(.failure(ErrorBox(message: error.localizedDescription))) }
             }
             group.addTask {
-                do { return .wind(.success(try await fetchWind(force: force))) }
+                do { return .wind(.success(try await WindFieldEngine.refresh(force: force))) }
                 catch { return .wind(.failure(ErrorBox(message: error.localizedDescription))) }
             }
             var snapshot = RefreshSnapshot()
@@ -90,7 +90,9 @@ enum FeedService {
                 case .cameras(.failure(let error)): snapshot.failures.cameras = error.message
                 case .dispatch(.success(let value)): snapshot.dispatchSignals = value
                 case .dispatch(.failure(let error)): snapshot.failures.dispatch = error.message
-                case .wind(.success(let value)): snapshot.wind = value
+                case .wind(.success(let value)):
+                    snapshot.wind = value.legacy
+                    snapshot.windField = value.field
                 case .wind(.failure(let error)): snapshot.failures.wind = error.message
                 }
             }
@@ -217,54 +219,9 @@ enum FeedService {
             .sorted { ($0.reportedAt ?? .distantPast) > ($1.reportedAt ?? .distantPast) }
     }
 
-    static func fetchWind(force: Bool = false) async throws -> WindSnapshot {
-        let latitudes = stride(from: 33.25, through: 35.75, by: 0.25).map { $0 }
-        let longitudes = stride(from: -120.75, through: -117.25, by: 0.25).map { $0 }
-        let points = latitudes.flatMap { latitude in longitudes.map { (latitude, $0) } }
-        async let stations = fetchStations(force: force)
-        let latitudeList = points.map { String(format: "%.3f", $0.0) }.joined(separator: ",")
-        let longitudeList = points.map { String(format: "%.3f", $0.1) }.joined(separator: ",")
-        var components = URLComponents(string: openMeteoBase)!
-        components.queryItems = [
-            URLQueryItem(name: "latitude", value: latitudeList),
-            URLQueryItem(name: "longitude", value: longitudeList),
-            URLQueryItem(name: "current", value: "wind_speed_10m,wind_direction_10m,wind_gusts_10m"),
-            URLQueryItem(name: "wind_speed_unit", value: "mph"),
-            URLQueryItem(name: "timezone", value: "UTC")
-        ]
-        // One multi-location request avoids five concurrent failure points. A
-        // current-wind grid does not need to be re-downloaded every two minutes;
-        // the longer TTL also stays within Open-Meteo's public usage envelope.
-        let data = try await performData(URLRequest(url: components.url!), maxAge: 1_800, staleAge: 21_600, force: force)
-        let models = try JSONDecoder().decode([OpenMeteoWindResponse].self, from: data)
-        guard models.count == points.count else { throw URLError(.cannotParseResponse) }
-        let samples = models.map {
-            WindSample(id: "\($0.latitude),\($0.longitude)", coordinate: .init(latitude: $0.latitude, longitude: $0.longitude), speedMPH: $0.current.windSpeed, directionDegrees: $0.current.windDirection, gustMPH: $0.current.windGusts)
-        }
-        return try await WindSnapshot(samples: samples, stations: stations)
-    }
-
-    static func fetchStations(force: Bool = false) async throws -> [WeatherStation] {
-        let stationNames = ["TPGC1": "TOPANGA RAWS", "CEEC1": "CHEESEBORO RAWS", "MBUC1": "MALIBU HILLS RAWS", "LCBC1": "LEO CARRILLO RAWS"]
-        return await withTaskGroup(of: WeatherStation?.self) { group in
-            for (id, name) in stationNames {
-                group.addTask {
-                    var request = URLRequest(url: URL(string: "https://api.weather.gov/stations/\(id)/observations/latest")!)
-                    request.setValue("FireWatch-personal (finlaybennett@gmail.com)", forHTTPHeaderField: "User-Agent")
-                    do {
-                        let observation: NWSStationObservation = try await perform(request, maxAge: 60, staleAge: 3_600, force: force)
-                        guard observation.geometry.coordinates.count >= 2,
-                              let metersPerSecond = observation.properties.windSpeed.value,
-                              let direction = observation.properties.windDirection.value else { return nil }
-                        return WeatherStation(id: id, name: name, coordinate: .init(latitude: observation.geometry.coordinates[1], longitude: observation.geometry.coordinates[0]), speedMPH: metersPerSecond * 2.23694, directionDegrees: direction, observedAt: observation.properties.timestamp)
-                    } catch { return nil }
-                }
-            }
-            var result: [WeatherStation] = []
-            for await station in group { if let station { result.append(station) } }
-            return result.sorted { $0.id < $1.id }
-        }
-    }
+    // Wind observations, model background, and terrain now come from the
+    // analysis pipeline: see WindFieldEngine (orchestration), WindDataService
+    // (Synoptic / NWS / Open-Meteo fetchers), and FireWatch/Wind/ generally.
 
     static func fetchCameraImage(_ url: URL) async throws -> Data {
         try await performData(URLRequest(url: url), maxAge: 15, staleAge: 3_600, force: false)
@@ -297,7 +254,9 @@ enum FeedService {
         return try decoder.decode(T.self, from: data)
     }
 
-    private static func performData(_ request: URLRequest, maxAge: TimeInterval = 0, staleAge: TimeInterval = 0, force: Bool = false) async throws -> Data {
+    /// Internal (not private): the wind data service routes its requests through
+    /// the same TTL cache, coalescing, and stale-fallback machinery.
+    static func performData(_ request: URLRequest, maxAge: TimeInterval = 0, staleAge: TimeInterval = 0, force: Bool = false) async throws -> Data {
         try await SourceDataCache.shared.data(for: request, maxAge: maxAge, staleAge: staleAge, force: force)
     }
 
